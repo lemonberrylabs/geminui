@@ -5,7 +5,7 @@
   "description": "Chrome extension to enhance Gemini UI. This package.json is for managing development scripts.",
   "scripts": {
     "package": "zip -r gemini-ui-enhancer.zip . -x '.git/*' -x 'website/*' -x 'node_modules/*' -x '*.zip' -x 'README.md' -x '.gitignore' -x 'package.json' -x 'yarn.lock' -x '__MACOSX/*' -x '.github/*'",
-    "tag": "jq -e '.version == $(jq -r .version manifest.json)' package.json && git tag v${version} && git push origin v${version}"
+    "tag": "sh scripts/tag.sh"
   },
   "devDependencies": {}
 } 
