@@ -150,39 +150,63 @@ async function extractAllConversations() {
     return conversations;
   }
 
-  const scrollerEl = conversationListEl.closest('.overflow-container') || conversationListEl.closest('infinite-scroller');
+  const scrollerEl = conversationListEl.closest('infinite-scroller') || conversationListEl.closest('.overflow-container');
   
-  if (storedConversationsCount <= 20) {
-    console.log('[GeminiUI Enhancer] Less than or equal to 20 conversations stored, attempting to load all conversations.');
+  if (storedConversationsCount <= 600) {
+    console.log('[GeminiUI Enhancer] Less than or equal to 600 conversations stored, attempting to load all conversations.');
     if (scrollerEl) {
       let previousScrollHeight = 0;
       let currentScrollHeight = scrollerEl.scrollHeight;
       let attempts = 0;
-      const MAX_SCROLL_ATTEMPTS = 100; // Prevent infinite loops
+      const MAX_SCROLL_ATTEMPTS = 30; // Prevent infinite loops
+      let noNewContentStreak = 0;
+      const MAX_NO_NEW_CONTENT_STREAK = 3; // How many times to tolerate no scroll height change if button also not actionable
 
       while (attempts < MAX_SCROLL_ATTEMPTS) {
         previousScrollHeight = currentScrollHeight;
         scrollerEl.scrollTop = scrollerEl.scrollHeight; // Scroll to the bottom
-        await sleep(1500); // Wait for content to load
+        await sleep(1000); // Wait for content to load after scroll
         currentScrollHeight = scrollerEl.scrollHeight;
 
-        // Check if a "Show more" button is visible and click it if it is
-        const showMoreBtn = conversationListEl.querySelector('button[data-test-id="show-more-button"]');
-        if (showMoreBtn && showMoreBtn.offsetParent !== null && showMoreBtn.textContent && showMoreBtn.textContent.trim().toLowerCase() === 'show more') {
-          console.log('[GeminiUI Enhancer] Clicking "Show more" button during scroll.');
-          showMoreBtn.click();
-          await sleep(2000); // Wait for new items from "Show more"
-          currentScrollHeight = scrollerEl.scrollHeight; // Re-evaluate scroll height
-        } else if (!showMoreBtn || (showMoreBtn.textContent && showMoreBtn.textContent.trim().toLowerCase() !== 'show more')) {
-           console.log('[GeminiUI Enhancer] No "Show more" button, or button text is not "Show more". Assuming end of list or alternative state.');
-           break; // Exit if no "Show more" or it changed
+        let showMoreClickedInThisIteration = false;
+        // Try to find and click "Show more" button multiple times if needed
+        for (let btnAttempt = 0; btnAttempt < 3; btnAttempt++) {
+          const showMoreBtn = conversationListEl.querySelector('button[data-test-id="show-more-button"]');
+          if (showMoreBtn && showMoreBtn.offsetParent !== null && showMoreBtn.textContent && showMoreBtn.textContent.trim().toLowerCase() === 'show more') {
+            console.log(`[GeminiUI Enhancer] Clicking "Show more" button (Attempt ${btnAttempt + 1}/3 in scroll iteration).`);
+            showMoreBtn.click();
+            showMoreClickedInThisIteration = true;
+            await sleep(2000); // Wait for new items from "Show more"
+            currentScrollHeight = scrollerEl.scrollHeight; // Re-evaluate scroll height after click
+            noNewContentStreak = 0; // Reset streak if button was clicked
+            break; // Exit button finding loop
+          } else if (btnAttempt < 2) { // Don't log or wait on the last button attempt if it fails
+            // console.log(`[GeminiUI Enhancer] "Show more" button not actionable yet (Attempt ${btnAttempt + 1}/3). Waiting briefly.`);
+            await sleep(500); // Brief wait for button to potentially become actionable
+          }
         }
 
-
-        if (scrollerEl.scrollTop + scrollerEl.clientHeight >= currentScrollHeight - 5 && previousScrollHeight === currentScrollHeight) {
-          console.log('[GeminiUI Enhancer] Reached the end of the scroll or no new content loaded.');
-          break;
+        if (!showMoreClickedInThisIteration && currentScrollHeight === previousScrollHeight) {
+          noNewContentStreak++;
+          console.log(`[GeminiUI Enhancer] No new content loaded and "Show more" not clicked. Streak: ${noNewContentStreak}/${MAX_NO_NEW_CONTENT_STREAK}.`);
+          if (noNewContentStreak >= MAX_NO_NEW_CONTENT_STREAK) {
+            console.log('[GeminiUI Enhancer] Reached the end of the scroll or no new content loaded after multiple attempts.');
+            break;
+          }
+        } else if (currentScrollHeight > previousScrollHeight) {
+          noNewContentStreak = 0; // Reset if scroll height increased
         }
+        
+        // Check if we are at the bottom and no more button is available or effective
+        const isAtBottom = scrollerEl.scrollTop + scrollerEl.clientHeight >= currentScrollHeight - 10; // थोड़ा टॉलरेंस
+        const showMoreBtnFinalCheck = conversationListEl.querySelector('button[data-test-id="show-more-button"]');
+        const showMoreActionable = showMoreBtnFinalCheck && showMoreBtnFinalCheck.offsetParent !== null && showMoreBtnFinalCheck.textContent && showMoreBtnFinalCheck.textContent.trim().toLowerCase() === 'show more';
+
+        if (isAtBottom && !showMoreActionable && !showMoreClickedInThisIteration && currentScrollHeight === previousScrollHeight) {
+            console.log('[GeminiUI Enhancer] At bottom, and "Show more" button is not actionable or not present. Assuming end of list.');
+            break;
+        }
+
         attempts++;
       }
       if (attempts >= MAX_SCROLL_ATTEMPTS) {
@@ -223,7 +247,7 @@ async function extractAllConversations() {
     }
     console.log('[GeminiUI Enhancer] Finished scrolling/ "Show more" logic.');
   } else {
-    console.log('[GeminiUI Enhancer] More than 20 conversations stored. Skipping full scroll/ "Show more" to fetch only new ones.');
+    console.log('[GeminiUI Enhancer] More than 600 conversations stored. Skipping full scroll/ "Show more" to fetch only new ones.');
   }
   
   // Wait a moment for items to render after any scrolling or "Show more" clicks
