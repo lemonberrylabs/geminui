@@ -99,6 +99,18 @@ async function extractAllConversations() {
   const seen = new Set();
   console.log('[GeminiUI Enhancer] Starting conversation extraction...');
 
+  // First, check local storage for existing conversation count
+  let storedConversationsCount = 0;
+  try {
+    const result = await new Promise((resolve) => {
+      chrome.storage.local.get(['geminiConversations'], resolve);
+    });
+    storedConversationsCount = result.geminiConversations ? result.geminiConversations.length : 0;
+    console.log(`[GeminiUI Enhancer] Found ${storedConversationsCount} conversations in local storage.`);
+  } catch (error) {
+    console.error('[GeminiUI Enhancer] Error reading from local storage:', error);
+  }
+
   // Ensure sidebar is open (assuming conversations-list might be in a sidebar)
   const sidebarReady = await ensureSidebarOpen();
   if (!sidebarReady) {
@@ -112,6 +124,14 @@ async function extractAllConversations() {
   const listRetryDelay = 500; // 0.5 seconds delay between retries
 
   for (let i = 0; i < maxListRetries; i++) {
+    // The infinite scroller seems to be a wrapper around the list.
+    // We need to find the 'conversations-list' *within* an 'infinite-scroller' if that's the new structure.
+    // Based on the HTML, the 'infinite-scroller' is a sibling/parent, not a direct wrapper for the button.
+    // The critical element for conversations is 'conversations-list[data-test-id="all-conversations"]'
+    // And the scroller element for the whole sidebar content is 'side-navigation-content .overflow-container'
+    // or potentially 'infinite-scroller' if it wraps 'conversations-list'.
+    // Let's stick to the known 'conversations-list' for finding the "Show more" button.
+
     conversationListEl = document.querySelector('conversations-list[data-test-id="all-conversations"]');
     if (conversationListEl) {
       console.log(`[GeminiUI Enhancer] Found conversation list element after ${i} retries.`);
@@ -123,57 +143,90 @@ async function extractAllConversations() {
 
   if (!conversationListEl) {
     console.error('[GeminiUI Enhancer] "conversations-list[data-test-id=\"all-conversations\"]" element not found after retries. Cannot extract conversations.');
-    // Attempt to find all divs with jslog as a last resort, but this is less targeted
     const allDivsWithJslog = Array.from(document.querySelectorAll('div[jslog]'));
     if (allDivsWithJslog.length > 0) {
         console.log(`[GeminiUI Enhancer] Fallback: Found ${allDivsWithJslog.length} divs with jslog attribute (less reliable).`);
     }
     return conversations;
   }
-  // If found, conversationListEl is now assigned. Original console log for finding it is covered by the loop's success message.
 
-  // Handle "Show more" button with improved robustness
-  console.log('[GeminiUI Enhancer] Starting "Show more" button handling logic.');
-  let showMoreButtonVisibleAndActionable = true;
-  let initialButtonFindAttempts = 0;
-  const MAX_INITIAL_FIND_ATTEMPTS = 3; // How many times to check for button if not immediately visible
-  const RETRY_DELAY_MS = 500; // Delay for retrying to find the button
+  const scrollerEl = conversationListEl.closest('.overflow-container') || conversationListEl.closest('infinite-scroller');
+  
+  if (storedConversationsCount <= 20) {
+    console.log('[GeminiUI Enhancer] Less than or equal to 20 conversations stored, attempting to load all conversations.');
+    if (scrollerEl) {
+      let previousScrollHeight = 0;
+      let currentScrollHeight = scrollerEl.scrollHeight;
+      let attempts = 0;
+      const MAX_SCROLL_ATTEMPTS = 100; // Prevent infinite loops
 
-  // eslint-disable-next-line no-constant-condition
-  while (showMoreButtonVisibleAndActionable) {
-    let currentShowMoreBtn = conversationListEl.querySelector('button[data-test-id="show-more-button"]');
+      while (attempts < MAX_SCROLL_ATTEMPTS) {
+        previousScrollHeight = currentScrollHeight;
+        scrollerEl.scrollTop = scrollerEl.scrollHeight; // Scroll to the bottom
+        await sleep(1500); // Wait for content to load
+        currentScrollHeight = scrollerEl.scrollHeight;
 
-    if (currentShowMoreBtn) {
-      // Button is present
-      initialButtonFindAttempts = 0; // Reset counter once button is found
+        // Check if a "Show more" button is visible and click it if it is
+        const showMoreBtn = conversationListEl.querySelector('button[data-test-id="show-more-button"]');
+        if (showMoreBtn && showMoreBtn.offsetParent !== null && showMoreBtn.textContent && showMoreBtn.textContent.trim().toLowerCase() === 'show more') {
+          console.log('[GeminiUI Enhancer] Clicking "Show more" button during scroll.');
+          showMoreBtn.click();
+          await sleep(2000); // Wait for new items from "Show more"
+          currentScrollHeight = scrollerEl.scrollHeight; // Re-evaluate scroll height
+        } else if (!showMoreBtn || (showMoreBtn.textContent && showMoreBtn.textContent.trim().toLowerCase() !== 'show more')) {
+           console.log('[GeminiUI Enhancer] No "Show more" button, or button text is not "Show more". Assuming end of list or alternative state.');
+           break; // Exit if no "Show more" or it changed
+        }
 
-      if (currentShowMoreBtn.textContent && currentShowMoreBtn.textContent.trim().toLowerCase() === 'show more') {
-        console.log('[GeminiUI Enhancer] Clicking "Show more" button:', currentShowMoreBtn);
-        currentShowMoreBtn.click();
-        await sleep(1500); // Wait a bit longer for new items to load
-        // Loop continues to check for the button again
-      } else {
-        // Button exists, but not "Show more" (e.g. "Show less", or different text)
-        console.log('[GeminiUI Enhancer] "Show more" button found, but text is not "Show more". Current text:', currentShowMoreBtn.textContent, '. Assuming all items shown.');
-        showMoreButtonVisibleAndActionable = false; // Stop the process
+
+        if (scrollerEl.scrollTop + scrollerEl.clientHeight >= currentScrollHeight - 5 && previousScrollHeight === currentScrollHeight) {
+          console.log('[GeminiUI Enhancer] Reached the end of the scroll or no new content loaded.');
+          break;
+        }
+        attempts++;
+      }
+      if (attempts >= MAX_SCROLL_ATTEMPTS) {
+        console.warn('[GeminiUI Enhancer] Max scroll attempts reached. Proceeding with extracted conversations.');
       }
     } else {
-      // Button is not present
-      if (initialButtonFindAttempts < MAX_INITIAL_FIND_ATTEMPTS) {
-        initialButtonFindAttempts++;
-        console.log(`[GeminiUI Enhancer] "Show more" button not found. Attempt ${initialButtonFindAttempts}/${MAX_INITIAL_FIND_ATTEMPTS}. Waiting ${RETRY_DELAY_MS}ms...`);
-        await sleep(RETRY_DELAY_MS);
-        // Continue loop to try finding the button again
-      } else {
-        // Button not found after several attempts
-        console.log('[GeminiUI Enhancer] "Show more" button not found after retries. Assuming all items shown or button not available.');
-        showMoreButtonVisibleAndActionable = false; // Stop the process
+      console.log('[GeminiUI Enhancer] Scroller element not found. Falling back to "Show more" button logic only.');
+      // Fallback to original "Show more" button logic if scrollerEl is not found.
+      let showMoreButtonVisibleAndActionable = true;
+      let initialButtonFindAttempts = 0;
+      const MAX_INITIAL_FIND_ATTEMPTS = 3;
+      const RETRY_DELAY_MS = 500;
+
+      // eslint-disable-next-line no-constant-condition
+      while (showMoreButtonVisibleAndActionable) {
+        let currentShowMoreBtn = conversationListEl.querySelector('button[data-test-id="show-more-button"]');
+        if (currentShowMoreBtn) {
+          initialButtonFindAttempts = 0;
+          if (currentShowMoreBtn.textContent && currentShowMoreBtn.textContent.trim().toLowerCase() === 'show more') {
+            console.log('[GeminiUI Enhancer] Clicking "Show more" button (fallback logic):', currentShowMoreBtn);
+            currentShowMoreBtn.click();
+            await sleep(1500);
+          } else {
+            console.log('[GeminiUI Enhancer] "Show more" button found, but text is not "Show more" (fallback logic). Assuming all items shown.');
+            showMoreButtonVisibleAndActionable = false;
+          }
+        } else {
+          if (initialButtonFindAttempts < MAX_INITIAL_FIND_ATTEMPTS) {
+            initialButtonFindAttempts++;
+            console.log(`[GeminiUI Enhancer] "Show more" button not found (fallback logic). Attempt ${initialButtonFindAttempts}/${MAX_INITIAL_FIND_ATTEMPTS}. Waiting ${RETRY_DELAY_MS}ms...`);
+            await sleep(RETRY_DELAY_MS);
+          } else {
+            console.log('[GeminiUI Enhancer] "Show more" button not found after retries (fallback logic). Assuming all items shown or button not available.');
+            showMoreButtonVisibleAndActionable = false;
+          }
+        }
       }
     }
+    console.log('[GeminiUI Enhancer] Finished scrolling/ "Show more" logic.');
+  } else {
+    console.log('[GeminiUI Enhancer] More than 20 conversations stored. Skipping full scroll/ "Show more" to fetch only new ones.');
   }
-  console.log('[GeminiUI Enhancer] Finished handling "Show more" logic.');
-
-  // Wait a moment for items to render after any "Show more" clicks
+  
+  // Wait a moment for items to render after any scrolling or "Show more" clicks
   console.log('[GeminiUI Enhancer] Waiting for conversation items to render...');
   await sleep(1000); // 1-second delay
 
