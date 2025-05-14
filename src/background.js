@@ -1,5 +1,7 @@
 // Background script for the GeminiUI Enhancer extension
 
+let currentScrapingState = 'idle'; // Possible states: 'idle', 'scraping', 'error'
+
 // Listen for messages from content scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'conversationsUpdated') {
@@ -63,13 +65,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Return true to indicate we're handling the response asynchronously
     return true;
   } else if (message.action === 'scrapingStatus') {
+    // Update our state
+    if (message.status === 'started') {
+      currentScrapingState = 'scraping';
+    } else if (message.status === 'completed') {
+      currentScrapingState = 'idle'; 
+    } else if (message.status === 'error') {
+      currentScrapingState = 'error'; // Or perhaps 'idle' depending on desired retry logic
+    }
+    
     // Relay scraping status to popup and any other extension pages
     chrome.runtime.sendMessage(message); // This will send to popup.js and other listeners
-    console.log('[GeminiUI Enhancer Background] Relaying scraping status:', message.status);
-    // Potentially also send to a specific tab if needed, but for now, general broadcast is fine
-    // as popup.js will be the primary listener.
+    console.log('[GeminiUI Enhancer Background] Relaying scraping status:', message.status, 'New state:', currentScrapingState);
     sendResponse({ success: true, message: 'Scraping status relayed' });
     return false; // No further async response from here
+  } else if (message.action === 'getScrapingState') {
+    console.log('[GeminiUI Enhancer Background] Popup requested scraping state. Current state:', currentScrapingState);
+    sendResponse({ status: currentScrapingState });
+    return false; // Synchronous response
   }
 });
 

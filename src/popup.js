@@ -106,5 +106,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// Function to update UI based on scraping state
+function updateUiForScrapingState(state) {
+  if (state === 'scraping') {
+    scrapingIndicator.textContent = 'Scraping conversations...';
+    scrapingIndicator.style.display = 'block';
+    refreshButton.disabled = true;
+    refreshButton.textContent = 'Scraping...';
+  } else {
+    // For 'idle' or 'error' states, the normal message handler will eventually reset things
+    // or the user can try again. Here, we just ensure the button is enabled if not scraping.
+    if (refreshButton.textContent === 'Scraping...') { // Only reset if it was in scraping state
+        scrapingIndicator.style.display = 'none';
+        refreshButton.disabled = false;
+        refreshButton.textContent = 'Refresh Data';
+    }
+  }
+}
+
 // Initialize the popup
-document.addEventListener('DOMContentLoaded', loadData); 
+document.addEventListener('DOMContentLoaded', () => {
+  loadData();
+  // Ask background script for current scraping state
+  chrome.runtime.sendMessage({ action: 'getScrapingState' }, (response) => {
+    if (response && response.status) {
+      console.log('[GeminiUI Enhancer Popup] Received initial scraping state:', response.status);
+      updateUiForScrapingState(response.status);
+    }
+  });
+}); 
