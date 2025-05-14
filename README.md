@@ -25,12 +25,15 @@ While the current version uses a separate interface, the ultimate vision is to i
 6.  Click the GeminiUI Enhancer icon in your Chrome toolbar to see stats or open the enhanced conversation viewer.
   
 ![Extension Popup](assets/screenshot3.png)
+
 *The extension popup showing quick stats and access to the main UI*
 
 ![Main UI](assets/screenshot2.png)
+
 *The enhanced conversation viewer with search functionality*
 
 ![Search Results](assets/screenshot1.png)
+
 *Search results showing matching conversations*
 
 
