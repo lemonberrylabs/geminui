@@ -13,6 +13,21 @@ While the current version uses a separate interface, the ultimate vision is to i
 - **Enhanced Browsing & Searching**: Access a dedicated view to see all your archived conversations with fast client-side search.
 - **Preserves History**: New conversations are added to your existing collection, so you don't lose track of older chats even if they are not immediately visible on Gemini's page.
 
+## Quick Start
+
+### From Source (For Users & Testers)
+
+1.  Clone this repository or download it as a ZIP file and unzip it.
+2.  Open Chrome and navigate to `chrome://extensions/`.
+3.  Enable "Developer mode" (usually a toggle in the top right corner).
+4.  Click "Load unpacked" and select the `extension` folder from the cloned/downloaded project.
+5.  Visit [Gemini](https://gemini.google.com/app). The extension will start working automatically in the background.
+6.  Click the GeminiUI Enhancer icon in your Chrome toolbar to see stats or open the enhanced conversation viewer.
+
+### From Chrome Web Store
+
+[Link to GeminiUI Enhancer on the Chrome Web Store] - (Coming Soon!)
+
 ## How it Works
 
 The extension has two main parts:
@@ -22,17 +37,6 @@ The extension has two main parts:
     *   The extracted data is saved into `chrome.storage.local`.
     *   The extension's popup (`popup.html`, `src/popup.js`) provides a quick overview and a link to the main UI.
     *   The main UI (`website/index.html`, `website/script.js`, `website/styles.css`) reads from this storage to display your conversations and allow you to search them.
-
-## Installation
-
-### For Users & Testers
-
-1.  Clone this repository or download it as a ZIP file and unzip it.
-2.  Open Chrome and navigate to `chrome://extensions/`.
-3.  Enable "Developer mode" (usually a toggle in the top right corner).
-4.  Click "Load unpacked" and select the `extension` folder from the cloned/downloaded project.
-5.  Visit [Gemini](https://gemini.google.com/app). The extension will start working automatically in the background.
-6.  Click the GeminiUI Enhancer icon in your Chrome toolbar to see stats or open the enhanced conversation viewer.
 
 ## Why This Project Exists
 
