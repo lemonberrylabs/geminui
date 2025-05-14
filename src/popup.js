@@ -5,6 +5,7 @@ const conversationCountElement = document.getElementById('conversation-count');
 const lastUpdatedElement = document.getElementById('last-updated');
 const openUiButton = document.getElementById('open-ui');
 const refreshButton = document.getElementById('refresh');
+const scrapingIndicator = document.getElementById('scraping-indicator');
 
 // Function to format date
 function formatDate(dateString) {
@@ -56,32 +57,52 @@ openUiButton.addEventListener('click', () => {
 
 // Handle refreshing the data (this will trigger a scan on the current tab if it's Gemini)
 refreshButton.addEventListener('click', async () => {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tabs.length === 0) return;
-  
-  const tab = tabs[0];
-  if (tab.url && tab.url.startsWith('https://gemini.google.com/app')) {
-    // Execute a content script to trigger a refresh
-    chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      function: () => {
-        // This will run in the context of the page
-        const event = new CustomEvent('geminiUiEnhancerRefresh');
-        document.dispatchEvent(event);
-        
-        // Also trigger a scroll to load more conversations
-        document.querySelector('[role="navigation"]')?.scrollTo(0, 9999);
-      }
-    });
-    
-    // Update button text to indicate refresh
-    refreshButton.textContent = 'Refreshing...';
-    setTimeout(() => {
+  // It's better to send a message to the background script to handle this,
+  // as it has more robust logic for finding/opening Gemini and injecting.
+  chrome.runtime.sendMessage({ action: 'refreshData' }, (response) => {
+    if (response && response.success) {
+      // The background script will handle triggering the content script.
+      // The content script will now send 'scrapingStatus' messages.
+      // We don't need to manually set 'Refreshing...' here anymore,
+      // as the message listener below will handle the UI updates.
+      console.log('[GeminiUI Enhancer Popup] Refresh data message sent to background.');
+    } else {
+      console.error('[GeminiUI Enhancer Popup] Failed to send refresh data message:', response?.error);
+      alert('Could not initiate data refresh. Ensure a Gemini tab is open or can be opened.');
+    }
+  });
+});
+
+// Listen for messages from the background script (e.g., scraping status)
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'scrapingStatus') {
+    if (message.status === 'started') {
+      scrapingIndicator.textContent = 'Scraping conversations...';
+      scrapingIndicator.style.display = 'block';
+      refreshButton.disabled = true;
+      refreshButton.textContent = 'Scraping...';
+    } else if (message.status === 'completed') {
+      scrapingIndicator.textContent = `Scraping complete. Found ${message.count || 0} new.`;
+      // Keep indicator visible for a moment, then hide
+      setTimeout(() => {
+        scrapingIndicator.style.display = 'none';
+      }, 3000);
+      refreshButton.disabled = false;
       refreshButton.textContent = 'Refresh Data';
-      loadData();
-    }, 2000);
-  } else {
-    alert('Please navigate to Gemini to refresh conversation data');
+      loadData(); // Reload data to show new count and last updated
+    } else if (message.status === 'error') {
+      scrapingIndicator.textContent = `Error during scraping: ${message.errorMessage || 'Unknown error'}`;
+      scrapingIndicator.style.backgroundColor = '#fce8e6'; // Error color
+      scrapingIndicator.style.color = '#c5221f';
+      // Keep indicator visible for a moment, then hide
+      setTimeout(() => {
+        scrapingIndicator.style.display = 'none';
+        scrapingIndicator.style.backgroundColor = '#e8f0fe'; // Reset color
+        scrapingIndicator.style.color = '#1967d2';
+      }, 5000);
+      refreshButton.disabled = false;
+      refreshButton.textContent = 'Refresh Data';
+    }
   }
 });
 

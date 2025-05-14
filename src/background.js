@@ -62,6 +62,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     
     // Return true to indicate we're handling the response asynchronously
     return true;
+  } else if (message.action === 'scrapingStatus') {
+    // Relay scraping status to popup and any other extension pages
+    chrome.runtime.sendMessage(message); // This will send to popup.js and other listeners
+    console.log('[GeminiUI Enhancer Background] Relaying scraping status:', message.status);
+    // Potentially also send to a specific tab if needed, but for now, general broadcast is fine
+    // as popup.js will be the primary listener.
+    sendResponse({ success: true, message: 'Scraping status relayed' });
+    return false; // No further async response from here
   }
 });
 

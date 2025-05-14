@@ -165,7 +165,7 @@ async function extractAllConversations() {
       while (attempts < MAX_SCROLL_ATTEMPTS) {
         previousScrollHeight = currentScrollHeight;
         scrollerEl.scrollTop = scrollerEl.scrollHeight; // Scroll to the bottom
-        await sleep(1000); // Wait for content to load after scroll
+        await sleep(2000); // Wait for content to load after scroll (increased from 1500)
         currentScrollHeight = scrollerEl.scrollHeight;
 
         let showMoreClickedInThisIteration = false;
@@ -176,13 +176,13 @@ async function extractAllConversations() {
             console.log(`[GeminiUI Enhancer] Clicking "Show more" button (Attempt ${btnAttempt + 1}/3 in scroll iteration).`);
             showMoreBtn.click();
             showMoreClickedInThisIteration = true;
-            await sleep(2000); // Wait for new items from "Show more"
+            await sleep(4500); // Wait for new items from "Show more" (increased from 3000)
             currentScrollHeight = scrollerEl.scrollHeight; // Re-evaluate scroll height after click
             noNewContentStreak = 0; // Reset streak if button was clicked
             break; // Exit button finding loop
           } else if (btnAttempt < 2) { // Don't log or wait on the last button attempt if it fails
             // console.log(`[GeminiUI Enhancer] "Show more" button not actionable yet (Attempt ${btnAttempt + 1}/3). Waiting briefly.`);
-            await sleep(500); // Brief wait for button to potentially become actionable
+            await sleep(1000); // Brief wait for button to potentially become actionable (increased from 750)
           }
         }
 
@@ -349,26 +349,21 @@ function saveConversations(newlyScrapedConversations) {
 // Main entry point
 async function runScraper() {
   console.log('[GeminiUI Enhancer] runScraper called.');
-  // It might be good to wait for document to be fully loaded
-  if (document.readyState === 'loading') {
-    console.log('[GeminiUI Enhancer] Document is loading, waiting for DOMContentLoaded.');
-    document.addEventListener('DOMContentLoaded', async () => {
-        console.log('[GeminiUI Enhancer] DOMContentLoaded, now running extraction.');
-        const conversations = await extractAllConversations();
-        if (conversations.length >= 0) { // Save even if empty to update timestamp or clear
-            saveConversations(conversations);
-            console.log(`[GeminiUI Enhancer] Saved ${conversations.length} conversations after DOMContentLoaded.`);
-        } 
-        // No explicit else, if conversations is undefined or null (error), it won't save.
-    });
-  } else {
-    console.log('[GeminiUI Enhancer] Document already loaded, running extraction.');
+  chrome.runtime.sendMessage({ action: 'scrapingStatus', status: 'started' });
+  try {
+    // If the trigger is manual via event, we don't need to check document.readyState here anymore for auto-run.
+    // The event will be dispatched when the user is ready.
+    console.log('[GeminiUI Enhancer] Preparing to extract conversations based on trigger.');
     const conversations = await extractAllConversations();
     if (conversations.length >= 0) { // Save even if empty to update timestamp or clear
         saveConversations(conversations);
-        console.log(`[GeminiUI Enhancer] Saved ${conversations.length} conversations (document already loaded).`);
+        console.log(`[GeminiUI Enhancer] Saved ${conversations.length} conversations.`);
     } 
     // No explicit else
+    chrome.runtime.sendMessage({ action: 'scrapingStatus', status: 'completed', count: conversations ? conversations.length : 0 });
+  } catch (error) {
+    console.error('[GeminiUI Enhancer] Error during scraping process:', error);
+    chrome.runtime.sendMessage({ action: 'scrapingStatus', status: 'error', errorMessage: error.message });
   }
 }
 
@@ -378,9 +373,7 @@ if (!window.__geminiEnhancerListener) {
   document.addEventListener('geminiUiEnhancerRefresh', runScraper);
 }
 
-// Initial run
-// Wait a brief moment for the page to potentially settle, then run.
-// Consider a more robust check like waiting for a specific element.
-setTimeout(runScraper, 2000); 
+// Initial run - REMOVED for manual trigger
+// setTimeout(runScraper, 2000); 
 
-console.log('[GeminiUI Enhancer] Content script loaded and running.');
+console.log('[GeminiUI Enhancer] Content script loaded. Ready for manual trigger via geminiUiEnhancerRefresh event.');
