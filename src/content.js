@@ -7,30 +7,90 @@ function sleep(ms) {
 
 // Ensures the sidebar is open by clicking the hamburger menu if needed
 async function ensureSidebarOpen() {
-  // Try to find the navigation region
-  let nav = document.querySelector('main nav');
-  if (nav) return true;
+  console.log('[GeminiUI Enhancer] ensureSidebarOpen: Starting check...');
 
-  // Try to find the hamburger menu button
-  // Try common selectors: aria-label, text, or fallback to first button
-  let menuBtn = document.querySelector('button[aria-label="Main menu"]');
+  function isNavValid(navElement) {
+    if (!navElement) return false;
+    const isOpenStyled = navElement.style.width.includes('var(--bard-sidenav-open-width)');
+    const isDomVisible = navElement.offsetParent !== null || getComputedStyle(navElement).display !== 'none';
+    const hasKeyContent = navElement.querySelector('conversations-list[data-test-id="all-conversations"]') !== null ||
+                           navElement.querySelector('side-nav-action-button[data-test-id="new-chat-button"]') !== null ||
+                           navElement.querySelector('button[aria-label="New chat"]') !== null;
+    // console.log('[GeminiUI Enhancer] isNavValid: Checking - isOpenStyled:', isOpenStyled, ', isDomVisible:', isDomVisible, ', hasKeyContent:', hasKeyContent);
+    return isOpenStyled && isDomVisible && hasKeyContent;
+  }
+
+  let nav = document.querySelector('bard-sidenav[role="navigation"]');
+  // console.log('[GeminiUI Enhancer] ensureSidebarOpen: Initial check for bard-sidenav[role="navigation"]':', nav);
+
+  if (isNavValid(nav)) {
+    console.log('[GeminiUI Enhancer] ensureSidebarOpen: Sidebar (bard-sidenav) is already present and valid.');
+    return true;
+  } else if (nav) {
+    // console.log('[GeminiUI Enhancer] ensureSidebarOpen: Sidebar (bard-sidenav) found, but isNavValid false. Style width:', nav.style.width);
+  } else {
+    // console.log('[GeminiUI Enhancer] ensureSidebarOpen: Sidebar (bard-sidenav) not found initially.');
+  }
+
+  // console.log('[GeminiUI Enhancer] ensureSidebarOpen: Attempting to find menu button.');
+  let menuBtn = document.querySelector('button[data-test-id="side-nav-menu-button"]');
+
   if (!menuBtn) {
-    // Fallback: look for a button with text content 'Main menu'
+    menuBtn = document.querySelector('button[aria-label="Main menu"]');
+  }
+  if (!menuBtn) {
     menuBtn = Array.from(document.querySelectorAll('button')).find(
       btn => btn.textContent && btn.textContent.trim() === 'Main menu'
     );
   }
-  if (menuBtn) {
-    menuBtn.click();
-    // Wait for the sidebar to appear
-    for (let i = 0; i < 10; i++) {
-      await sleep(200);
-      nav = document.querySelector('main nav');
-      if (nav) return true;
-    }
+  if (!menuBtn) {
+    menuBtn = document.querySelector('button[aria-label*="menu" i][aria-expanded]');
   }
-  // If still not found, give up
-  return !!document.querySelector('main nav');
+
+  if (menuBtn) {
+    // console.log('[GeminiUI Enhancer] ensureSidebarOpen: Menu button found:', menuBtn);
+    const ariaExpanded = menuBtn.getAttribute('aria-expanded');
+    // console.log('[GeminiUI Enhancer] ensureSidebarOpen: Menu button aria-expanded state:', ariaExpanded);
+
+    if (ariaExpanded === 'true') {
+        // console.log('[GeminiUI Enhancer] ensureSidebarOpen: Menu button aria-expanded is true. Re-evaluating sidebar.');
+        await sleep(100);
+        nav = document.querySelector('bard-sidenav[role="navigation"]');
+        if (isNavValid(nav)) {
+            console.log('[GeminiUI Enhancer] ensureSidebarOpen: Sidebar is valid after aria-expanded check. No click needed.');
+            return true;
+        }
+        // console.log('[GeminiUI Enhancer] ensureSidebarOpen: Sidebar still not valid despite aria-expanded true.');
+    } else {
+      // console.log('[GeminiUI Enhancer] ensureSidebarOpen: Clicking menu button. Aria-expanded:', ariaExpanded);
+      menuBtn.click();
+      // console.log('[GeminiUI Enhancer] ensureSidebarOpen: Menu button clicked. Waiting for sidebar.');
+      for (let i = 0; i < 20; i++) {
+        await sleep(300);
+        nav = document.querySelector('bard-sidenav[role="navigation"]');
+        // let navStatus = 'null';
+        // if (nav && nav.style) { navStatus = 'width: ' + nav.style.width; }
+        // console.log('[GeminiUI Enhancer] ensureSidebarOpen: Wait attempt ', i + 1, '. Found bard-sidenav:', navStatus);
+        if (isNavValid(nav)) {
+          console.log('[GeminiUI Enhancer] ensureSidebarOpen: Sidebar appeared and is valid after click, attempt ', i + 1);
+          return true;
+        }
+      }
+      // console.log('[GeminiUI Enhancer] ensureSidebarOpen: Sidebar did not become valid after click and waiting.');
+    }
+  } else {
+    console.log('[GeminiUI Enhancer] ensureSidebarOpen: Menu button not found after all attempts.');
+  }
+
+  nav = document.querySelector('bard-sidenav[role="navigation"]');
+  console.log('[GeminiUI Enhancer] ensureSidebarOpen: Final check for bard-sidenav[role="navigation"]', nav);
+  if (isNavValid(nav)) {
+    console.log('[GeminiUI Enhancer] ensureSidebarOpen: Sidebar is valid on final check.');
+    return true;
+  }
+
+  console.error('[GeminiUI Enhancer] ensureSidebarOpen: Sidebar (bard-sidenav) could not be reliably opened/confirmed.');
+  return false;
 }
 
 // Extracts conversation data from the left-hand menu
@@ -40,44 +100,75 @@ async function extractAllConversations() {
   console.log('[GeminiUI Enhancer] Starting conversation extraction...');
 
   // Ensure sidebar is open (assuming conversations-list might be in a sidebar)
-  // const sidebarReady = await ensureSidebarOpen();
-  // if (!sidebarReady) {
-  //   console.error('[GeminiUI Enhancer] Sidebar could not be opened or found.');
-  //   return conversations;
-  // }
-  // For now, let's assume the conversations-list is directly available or sidebar logic is complex to debug first.
-
-  // Find the conversations-list element using its data-test-id
-  const conversationListEl = document.querySelector('conversations-list[data-test-id="all-conversations"]');
-
-  if (!conversationListEl) {
-    console.error('[GeminiUI Enhancer] "conversations-list[data-test-id=\\"all-conversations\\"]" element not found. Cannot extract conversations.');
-    // Attempt to find all divs with jslog as a last resort, but this is less targeted
-    const allDivsWithJslog = Array.from(document.querySelectorAll('div[jslog]')); // This was a fallback, less likely to be useful now
-    if (allDivsWithJslog.length > 0) {
-        console.log(`[GeminiUI Enhancer] Fallback: Found ${allDivsWithJslog.length} divs with jslog attribute.`);
-    }
+  const sidebarReady = await ensureSidebarOpen();
+  if (!sidebarReady) {
+    console.error('[GeminiUI Enhancer] Sidebar could not be opened or found.');
     return conversations;
   }
 
-  console.log('[GeminiUI Enhancer] Found conversation list element:', conversationListEl);
+  // Retry mechanism for finding the conversations-list element
+  let conversationListEl = null;
+  const maxListRetries = 5; // Try up to 5 times
+  const listRetryDelay = 500; // 0.5 seconds delay between retries
 
-  // Handle "Show more" button using its data-test-id and text content
+  for (let i = 0; i < maxListRetries; i++) {
+    conversationListEl = document.querySelector('conversations-list[data-test-id="all-conversations"]');
+    if (conversationListEl) {
+      console.log(`[GeminiUI Enhancer] Found conversation list element after ${i} retries.`);
+      break;
+    }
+    console.log(`[GeminiUI Enhancer] Conversation list not found (attempt ${i + 1}/${maxListRetries}), retrying in ${listRetryDelay}ms...`);
+    await sleep(listRetryDelay);
+  }
+
+  if (!conversationListEl) {
+    console.error('[GeminiUI Enhancer] "conversations-list[data-test-id=\"all-conversations\"]" element not found after retries. Cannot extract conversations.');
+    // Attempt to find all divs with jslog as a last resort, but this is less targeted
+    const allDivsWithJslog = Array.from(document.querySelectorAll('div[jslog]'));
+    if (allDivsWithJslog.length > 0) {
+        console.log(`[GeminiUI Enhancer] Fallback: Found ${allDivsWithJslog.length} divs with jslog attribute (less reliable).`);
+    }
+    return conversations;
+  }
+  // If found, conversationListEl is now assigned. Original console log for finding it is covered by the loop's success message.
+
+  // Handle "Show more" button with improved robustness
+  console.log('[GeminiUI Enhancer] Starting "Show more" button handling logic.');
+  let showMoreButtonVisibleAndActionable = true;
+  let initialButtonFindAttempts = 0;
+  const MAX_INITIAL_FIND_ATTEMPTS = 3; // How many times to check for button if not immediately visible
+  const RETRY_DELAY_MS = 500; // Delay for retrying to find the button
+
   // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const currentShowMoreBtn = conversationListEl.querySelector('button[data-test-id="show-more-button"]');
+  while (showMoreButtonVisibleAndActionable) {
+    let currentShowMoreBtn = conversationListEl.querySelector('button[data-test-id="show-more-button"]');
 
-    if (currentShowMoreBtn && currentShowMoreBtn.textContent && currentShowMoreBtn.textContent.trim().toLowerCase() === 'show more') {
-      console.log('[GeminiUI Enhancer] Clicking "Show more" button:', currentShowMoreBtn);
-      currentShowMoreBtn.click();
-      await sleep(1500); // Wait a bit longer for new items to load
-    } else {
-      if (currentShowMoreBtn) {
-        console.log('[GeminiUI Enhancer] Button with data-test-id="show-more-button" found, but text is not "Show more". Current text:', currentShowMoreBtn.textContent);
+    if (currentShowMoreBtn) {
+      // Button is present
+      initialButtonFindAttempts = 0; // Reset counter once button is found
+
+      if (currentShowMoreBtn.textContent && currentShowMoreBtn.textContent.trim().toLowerCase() === 'show more') {
+        console.log('[GeminiUI Enhancer] Clicking "Show more" button:', currentShowMoreBtn);
+        currentShowMoreBtn.click();
+        await sleep(1500); // Wait a bit longer for new items to load
+        // Loop continues to check for the button again
       } else {
-        console.log('[GeminiUI Enhancer] "Show more" button with data-test-id="show-more-button" no longer found.');
+        // Button exists, but not "Show more" (e.g. "Show less", or different text)
+        console.log('[GeminiUI Enhancer] "Show more" button found, but text is not "Show more". Current text:', currentShowMoreBtn.textContent, '. Assuming all items shown.');
+        showMoreButtonVisibleAndActionable = false; // Stop the process
       }
-      break; // Exit the loop
+    } else {
+      // Button is not present
+      if (initialButtonFindAttempts < MAX_INITIAL_FIND_ATTEMPTS) {
+        initialButtonFindAttempts++;
+        console.log(`[GeminiUI Enhancer] "Show more" button not found. Attempt ${initialButtonFindAttempts}/${MAX_INITIAL_FIND_ATTEMPTS}. Waiting ${RETRY_DELAY_MS}ms...`);
+        await sleep(RETRY_DELAY_MS);
+        // Continue loop to try finding the button again
+      } else {
+        // Button not found after several attempts
+        console.log('[GeminiUI Enhancer] "Show more" button not found after retries. Assuming all items shown or button not available.');
+        showMoreButtonVisibleAndActionable = false; // Stop the process
+      }
     }
   }
   console.log('[GeminiUI Enhancer] Finished handling "Show more" logic.');
@@ -104,7 +195,6 @@ async function extractAllConversations() {
         const title = titleEl.textContent ? titleEl.textContent.trim() : 'Untitled';
         let url = null;
 
-        // INSTRUCTIONS.md jslog format: BardVeMetadataKey:[...,["c_ID",...]] or BardVeMetadataKey:[...,["ID",...]]
         // Need to extract the ID part for the URL https://gemini.google.com/app/ID
         // The pattern should capture the ID part, which might or might not have "c_" prefix in the jslog itself.
         // The final URL should be gemini.google.com/app/ID (without c_).
@@ -214,6 +304,6 @@ if (!window.__geminiEnhancerListener) {
 // Initial run
 // Wait a brief moment for the page to potentially settle, then run.
 // Consider a more robust check like waiting for a specific element.
-setTimeout(runScraper, 5000); // Increased delay to 5 seconds
+setTimeout(runScraper, 2000); 
 
 console.log('[GeminiUI Enhancer] Content script loaded and running.');
