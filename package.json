@@ -1,0 +1,10 @@
+{
+  "name": "gemini-ui-enhancer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome extension to enhance Gemini UI. This package.json is for managing development scripts.",
+  "scripts": {
+    "package": "zip -r gemini-ui-enhancer.zip . -x '.git/*' -x 'website/*' -x 'node_modules/*' -x '*.zip' -x 'README.md' -x '.gitignore' -x 'package.json' -x 'yarn.lock' -x '__MACOSX/*' -x '.github/*'"
+  },
+  "devDependencies": {}
+} 

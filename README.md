@@ -78,6 +78,46 @@ I'm excited to see what we can build together! Even small contributions or sugge
     *   `styles.css`: CSS for the page.
     *   `script.js`: JavaScript for fetching data from storage and handling search.
 
+## Making a New Release
+
+This project uses GitHub Actions to automate the creation of releases. To make a new release, follow these steps:
+
+1.  **Update Version in Manifest**: Increment the `"version"` number in the `manifest.json` file (e.g., from `"1.0.0"` to `"1.0.1"`). Ensure it follows [semantic versioning](https://semver.org/) principles.
+
+2.  **Commit the Version Change**:
+    ```bash
+    git add manifest.json
+    git commit -m "Bump version to vX.Y.Z" 
+    ```
+    (Replace `X.Y.Z` with the new version number).
+
+3.  **Tag the Commit**: Create a new Git tag that matches the version in `manifest.json`. The tag must start with `v`.
+    ```bash
+    git tag vX.Y.Z
+    ```
+    (Again, replace `X.Y.Z` with the new version number).
+
+4.  **Push Changes and Tag to GitHub**:
+    ```bash
+    git push
+    git push origin vX.Y.Z
+    ```
+
+Once the tag is pushed, the "Create Release" GitHub Action will automatically run. It will:
+*   Verify that the tag version matches the version in `manifest.json`.
+*   Package the extension into a `gemini-ui-enhancer-vX.Y.Z.zip` file.
+*   Create a new GitHub Release named after the tag, attaching the ZIP file.
+
+### Local Packaging (for testing)
+
+If you want to test the packaging process locally without creating a full release, you can use the `yarn package` script:
+
+```bash
+yarn package
+```
+
+This will generate a `gemini-ui-enhancer.zip` file in the project root, containing the extension files. This is useful for ensuring the correct files are included before tagging a release.
+
 ## Credits
 
 Originally created by @Enrico2 from Lemonberry Labs - Let's add your name here if you contribute! 

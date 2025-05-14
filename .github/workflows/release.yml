@@ -1,0 +1,59 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*" # Trigger on tags like v1.0.0, v0.1.0, etc.
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to create releases and upload assets
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Verify version matches manifest
+        id: verify_version
+        run: |
+          MANIFEST_VERSION=$(grep '"version":' manifest.json | sed -E 's/.*"version": "([0-9.]+)".*/\1/')
+          echo "Tag version: ${{ steps.get_version.outputs.version }}"
+          echo "Manifest version: $MANIFEST_VERSION"
+          if [ "${{ steps.get_version.outputs.version }}" != "$MANIFEST_VERSION" ]; then
+            echo "::error::Tag version (${{ steps.get_version.outputs.version }}) does not match manifest.json version ($MANIFEST_VERSION). Please update manifest.json."
+            exit 1
+          fi
+
+      - name: Install zip for packaging
+        run: sudo apt-get update && sudo apt-get install -y zip
+
+      - name: Package extension
+        run: |
+          zip -r "gemini-ui-enhancer-${{ steps.get_version.outputs.version }}.zip" . \
+            -x '.git/*' \
+            -x 'website/*' \
+            -x 'node_modules/*' \
+            -x '*.zip' \
+            -x 'README.md' \
+            -x '.gitignore' \
+            -x 'package.json' \
+            -x 'yarn.lock' \
+            -x '.github/*' \
+            -x '__MACOSX/*'
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          body: "Automated release for GeminiUI Enhancer version ${{ steps.get_version.outputs.version }}. SHA ${{ github.sha }}"
+          draft: false
+          prerelease: ${{startsWith(github.ref_name, 'v0.')}}
+          files: "gemini-ui-enhancer-${{ steps.get_version.outputs.version }}.zip"
