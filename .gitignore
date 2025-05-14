@@ -27,3 +27,6 @@ __MACOSX/
 !.vscode/extensions.json
 *.sublime-workspace
 *.sublime-project 
+
+# Large files
+large-files/*
