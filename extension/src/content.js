@@ -47,102 +47,93 @@ async function extractAllConversations() {
   // }
   // For now, let's assume the conversations-list is directly available or sidebar logic is complex to debug first.
 
-  // Find the conversations-list element
-  // The INSTRUCTIONS.md implies an element with this name/ID or a prominent class.
-  // Let's try common ways to find it: by ID, by class, or as a landmark/role.
-  let conversationListEl = document.getElementById('conversations-list');
-  if (!conversationListEl) {
-    conversationListEl = document.querySelector('.conversations-list');
-  }
-  if (!conversationListEl) {
-    // Fallback: Look for a nav element that might contain the list, then divs with jslog
-    // This is a bit of a guess if 'conversations-list' is not a direct ID/class.
-    // The original script used 'main nav' then 'region'.
-    // Let's try to be more specific to items with jslog as per instructions.
-    console.log('[GeminiUI Enhancer] Could not find element with ID/class "conversations-list". Searching for potential parent containers.');
-    // We will iterate through divs with jslog later. For now, let's assume 'conversations-list' exists or this will fail.
-    // This part needs robust selector from actual page structure if 'conversations-list' is not a direct ID/class.
-  }
+  // Find the conversations-list element using its data-test-id
+  const conversationListEl = document.querySelector('conversations-list[data-test-id="all-conversations"]');
 
   if (!conversationListEl) {
-    console.error('[GeminiUI Enhancer] "conversations-list" element not found. Cannot extract conversations.');
+    console.error('[GeminiUI Enhancer] "conversations-list[data-test-id=\\"all-conversations\\"]" element not found. Cannot extract conversations.');
     // Attempt to find all divs with jslog as a last resort, but this is less targeted
-    const allDivsWithJslog = Array.from(document.querySelectorAll('div[jslog]'));
+    const allDivsWithJslog = Array.from(document.querySelectorAll('div[jslog]')); // This was a fallback, less likely to be useful now
     if (allDivsWithJslog.length > 0) {
-        console.log(`[GeminiUI Enhancer] Found ${allDivsWithJslog.length} divs with jslog attribute as a fallback.`);
-        // This fallback would need a different processing logic, for now we rely on conversations-list
+        console.log(`[GeminiUI Enhancer] Fallback: Found ${allDivsWithJslog.length} divs with jslog attribute.`);
     }
     return conversations;
   }
 
-  console.log('[GeminiUI Enhancer] Found "conversations-list" element:', conversationListEl);
+  console.log('[GeminiUI Enhancer] Found conversation list element:', conversationListEl);
 
-  // INSTRUCTIONS.md: "each div under that conversation list element has a jslog field in it"
-  // and "The title is a div with the class conversation-title".
-  // We should look for these items within conversationListEl.
+  // Handle "Show more" button using its data-test-id and text content
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const currentShowMoreBtn = conversationListEl.querySelector('button[data-test-id="show-more-button"]');
 
-  // Handle "Show more" - This part might need to be adapted based on where "Show more" is relative to "conversations-list"
-  // The original script looked for "Show more" in a region.
-  // For now, let's assume it's within or near conversationListEl.
-  let showMoreBtn = Array.from(conversationListEl.querySelectorAll('button')).find(
-    btn => btn.textContent && btn.textContent.trim() === 'Show more'
-  );
-  while (showMoreBtn) {
-    console.log('[GeminiUI Enhancer] Clicking "Show more"...');
-    showMoreBtn.click();
-    await sleep(1000); // Increased wait time, consider MutationObserver for production
-    showMoreBtn = Array.from(conversationListEl.querySelectorAll('button')).find(
-      btn => btn.textContent && btn.textContent.trim() === 'Show more'
-    );
-  }
-  console.log('[GeminiUI Enhancer] No more "Show more" buttons found or all items loaded.');
-
-  const conversationItems = conversationListEl.querySelectorAll('div[jslog]');
-  console.log(`[GeminiUI Enhancer] Found ${conversationItems.length} potential conversation items (divs with jslog).`);
-
-  for (const item of conversationItems) {
-    const jslog = item.getAttribute('jslog');
-    const titleEl = item.querySelector('div.conversation-title');
-    
-    if (jslog && titleEl) {
-      const title = titleEl.textContent ? titleEl.textContent.trim() : 'Untitled';
-      let url = null;
-
-      // INSTRUCTIONS.md jslog format: BardVeMetadataKey:[null,null,null,null,null,null,null,["c_ID",...]]
-      // Need to extract "c_ID" then use ID for the URL https://gemini.google.com/app/ID
-      const jslogPattern = /BardVeMetadataKey:\[(?:[^,]+,){7}\["(c_([a-zA-Z0-9]+))"/;
-      const match = jslog.match(jslogPattern);
-
-      if (match && match[2]) { // match[2] is the ID part like "b048403da36b0a23"
-        const chatId = match[2];
-        url = `https://gemini.google.com/app/${chatId}`;
-        console.log(`[GeminiUI Enhancer] Extracted title: "${title}", id: ${chatId}, url: ${url}`);
+    if (currentShowMoreBtn && currentShowMoreBtn.textContent && currentShowMoreBtn.textContent.trim().toLowerCase() === 'show more') {
+      console.log('[GeminiUI Enhancer] Clicking "Show more" button:', currentShowMoreBtn);
+      currentShowMoreBtn.click();
+      await sleep(1500); // Wait a bit longer for new items to load
+    } else {
+      if (currentShowMoreBtn) {
+        console.log('[GeminiUI Enhancer] Button with data-test-id="show-more-button" found, but text is not "Show more". Current text:', currentShowMoreBtn.textContent);
       } else {
-        console.warn('[GeminiUI Enhancer] Could not extract chat ID from jslog:', jslog);
-        // Fallback for older regex if the new one fails, for debugging
-        const oldMatch = jslog.match(/c_([a-zA-Z0-9]+)/);
-        if (oldMatch && oldMatch[1]) {
-            const fallbackId = oldMatch[1];
-            // This fallback might be making the wrong URL if c_ is part of the ID for the URL
-            // The instruction was app/ID, so the original regex was extracting the ID correctly.
-            // Let's stick to the new more specific regex and if it fails, the ID is not extracted.
-            // url = `https://gemini.google.com/app/${fallbackId}`;
-            // console.log(`[GeminiUI Enhancer] Fallback extraction - title: "${title}", id: ${fallbackId}, url: ${url}`);
-        }
+        console.log('[GeminiUI Enhancer] "Show more" button with data-test-id="show-more-button" no longer found.');
       }
+      break; // Exit the loop
+    }
+  }
+  console.log('[GeminiUI Enhancer] Finished handling "Show more" logic.');
 
-      if (url) {
-        const key = `${title}-${url}`;
-        if (!seen.has(key)) {
-          conversations.push({ title, url });
-          seen.add(key);
+  // Wait a moment for items to render after any "Show more" clicks
+  console.log('[GeminiUI Enhancer] Waiting for conversation items to render...');
+  await sleep(1000); // 1-second delay
+
+  // Iterate over conversation item containers
+  // These containers wrap the actual clickable conversation item (div with role="button")
+  const conversationItemContainers = conversationListEl.querySelectorAll('div.conversation-items-container');
+  console.log(`[GeminiUI Enhancer] Found ${conversationItemContainers.length} potential conversation item containers (div.conversation-items-container).`);
+
+  for (const container of conversationItemContainers) {
+    // The actual clickable item with jslog is a div with role="button" and data-test-id="conversation"
+    const jslogEl = container.querySelector('div[role="button"][data-test-id="conversation"][jslog]');
+    
+    if (jslogEl) {
+      // The title (div.conversation-title) is a direct child of jslogEl
+      const titleEl = jslogEl.querySelector('div.conversation-title');
+      const jslog = jslogEl.getAttribute('jslog');
+      
+      if (titleEl && jslog) {
+        const title = titleEl.textContent ? titleEl.textContent.trim() : 'Untitled';
+        let url = null;
+
+        // INSTRUCTIONS.md jslog format: BardVeMetadataKey:[...,["c_ID",...]] or BardVeMetadataKey:[...,["ID",...]]
+        // Need to extract the ID part for the URL https://gemini.google.com/app/ID
+        // The pattern should capture the ID part, which might or might not have "c_" prefix in the jslog itself.
+        // The final URL should be gemini.google.com/app/ID (without c_).
+        const jslogPattern = /BardVeMetadataKey:\[(?:[^,\]]*?,){7}\s*\["(?:c_)?([a-zA-Z0-9]+)"/;
+        const match = jslog.match(jslogPattern);
+
+        if (match && match[1]) { 
+          const chatId = match[1]; // This is the ID, e.g., "0926671376b872ce"
+          url = `https://gemini.google.com/app/${chatId}`;
+          console.log(`[GeminiUI Enhancer] Extracted title: "${title}", id: ${chatId}, url: ${url}`);
         } else {
-          console.log(`[GeminiUI Enhancer] Duplicate conversation skipped: ${key}`);
+          console.warn(`[GeminiUI Enhancer] Could not extract chat ID from jslog: "${jslog}" on element:`, jslogEl);
         }
+
+        if (url) {
+          const key = `${title}-${url}`;
+          if (!seen.has(key)) {
+            conversations.push({ title, url });
+            seen.add(key);
+          } else {
+            console.log(`[GeminiUI Enhancer] Duplicate conversation skipped: ${key}`);
+          }
+        }
+      } else {
+        if (!titleEl) console.warn('[GeminiUI Enhancer] Conversation item div[role="button"] found without a div.conversation-title child:', jslogEl);
+        // jslog is guaranteed by jslogEl selector check
       }
     } else {
-      if (!jslog) console.warn('[GeminiUI Enhancer] Div found without jslog attribute inside conversation list.');
-      if (!titleEl) console.warn('[GeminiUI Enhancer] Div found without .conversation-title inside conversation list.');
+      console.warn('[GeminiUI Enhancer] Conversation item container found without a div[role="button"][data-test-id="conversation"][jslog] child:', container);
     }
   }
   
@@ -151,14 +142,39 @@ async function extractAllConversations() {
 }
 
 // Save conversations to storage
-function saveConversations(conversations) {
-  chrome.storage.local.set({
-    geminiConversations: conversations,
-    lastUpdated: new Date().toISOString()
-  }, () => {
-    chrome.runtime.sendMessage({
-      action: 'conversationsUpdated',
-      count: conversations.length
+function saveConversations(newlyScrapedConversations) {
+  chrome.storage.local.get(['geminiConversations'], (result) => {
+    const storedConversations = result.geminiConversations || [];
+    
+    // Use a Map to handle merging and de-duplication by URL
+    const conversationsMap = new Map();
+
+    // Add stored conversations to the map first
+    for (const convo of storedConversations) {
+      if (convo.url) { // Ensure URL exists to use as a key
+        conversationsMap.set(convo.url, convo);
+      }
+    }
+
+    // Add/update with newly scraped conversations
+    // extractAllConversations already ensures newlyScrapedConversations are unique among themselves
+    for (const convo of newlyScrapedConversations) {
+      if (convo.url) { // Ensure URL exists
+        conversationsMap.set(convo.url, convo); // Adds new or updates existing by URL
+      }
+    }
+
+    const mergedConversations = Array.from(conversationsMap.values());
+
+    chrome.storage.local.set({
+      geminiConversations: mergedConversations,
+      lastUpdated: new Date().toISOString()
+    }, () => {
+      chrome.runtime.sendMessage({
+        action: 'conversationsUpdated',
+        count: mergedConversations.length
+      });
+      console.log(`[GeminiUI Enhancer] Merged and saved ${mergedConversations.length} conversations.`);
     });
   });
 }
@@ -172,24 +188,20 @@ async function runScraper() {
     document.addEventListener('DOMContentLoaded', async () => {
         console.log('[GeminiUI Enhancer] DOMContentLoaded, now running extraction.');
         const conversations = await extractAllConversations();
-        if (conversations.length > 0) {
+        if (conversations.length >= 0) { // Save even if empty to update timestamp or clear
             saveConversations(conversations);
-        } else {
-            console.log('[GeminiUI Enhancer] No conversations extracted, or an error occurred. Not saving empty data.');
-            // Optionally, still call saveConversations to update timestamp or clear old data
-            // saveConversations([]); // Clears data and updates timestamp
-        }
+            console.log(`[GeminiUI Enhancer] Saved ${conversations.length} conversations after DOMContentLoaded.`);
+        } 
+        // No explicit else, if conversations is undefined or null (error), it won't save.
     });
   } else {
     console.log('[GeminiUI Enhancer] Document already loaded, running extraction.');
     const conversations = await extractAllConversations();
-    if (conversations.length > 0) {
+    if (conversations.length >= 0) { // Save even if empty to update timestamp or clear
         saveConversations(conversations);
-    } else {
-        console.log('[GeminiUI Enhancer] No conversations extracted, or an error occurred. Not saving empty data.');
-         // Optionally, still call saveConversations to update timestamp or clear old data
-         // saveConversations([]); // Clears data and updates timestamp
-    }
+        console.log(`[GeminiUI Enhancer] Saved ${conversations.length} conversations (document already loaded).`);
+    } 
+    // No explicit else
   }
 }
 
@@ -202,7 +214,6 @@ if (!window.__geminiEnhancerListener) {
 // Initial run
 // Wait a brief moment for the page to potentially settle, then run.
 // Consider a more robust check like waiting for a specific element.
-setTimeout(runScraper, 1000); 
-// runScraper(); // Original immediate call
+setTimeout(runScraper, 5000); // Increased delay to 5 seconds
 
-console.log('[GeminiUI Enhancer] Content script loaded and running.'); 
+console.log('[GeminiUI Enhancer] Content script loaded and running.');
