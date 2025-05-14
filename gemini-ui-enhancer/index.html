@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GeminiUI Enhancer</title>
+  <link rel="stylesheet" href="website/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <header class="header">
+      <div class="header-content">
+        <div class="logo">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <path d="M16 2L2 9L16 16L30 9L16 2Z" fill="#8E75FA" />
+            <path d="M2 9V23L16 30V16L2 9Z" fill="#7157D9" />
+            <path d="M30 9V23L16 30V16L30 9Z" fill="#5939B7" />
+          </svg>
+          <h1>GeminiUI Enhancer</h1>
+        </div>
+        
+        <div class="header-actions">
+          <span id="conversation-count" class="conversation-count">0 conversations</span>
+          <button id="refresh-btn" class="btn btn-secondary">Refresh Data</button>
+        </div>
+      </div>
+    </header>
+    
+    <main class="main-content">
+      <div class="search-container">
+        <div class="search-wrapper">
+          <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M8.5 3.5C5.73858 3.5 3.5 5.73858 3.5 8.5C3.5 11.2614 5.73858 13.5 8.5 13.5C11.2614 13.5 13.5 11.2614 13.5 8.5C13.5 5.73858 11.2614 3.5 8.5 3.5ZM2 8.5C2 4.91015 4.91015 2 8.5 2C12.0899 2 15 4.91015 15 8.5C15 10.0038 14.4951 11.3926 13.6492 12.5L17.8536 16.7071C18.0488 16.9024 18.0488 17.2189 17.8536 17.4142C17.6583 17.6095 17.3417 17.6095 17.1464 17.4142L12.942 13.2099C11.8346 14.0558 10.4458 14.5607 8.94197 14.5607C5.35212 14.5607 2.44197 11.6505 2.44197 8.06067L2 8.5Z" fill="#6F6F70" />
+          </svg>
+          <input type="text" id="search-input" placeholder="Search conversations..." class="search-input">
+          <button id="clear-search" class="clear-search-btn" style="display: none;">×</button>
+        </div>
+      </div>
+      
+      <div id="conversations-container" class="conversations-container">
+        <div class="loading">Loading conversations...</div>
+      </div>
+    </main>
+    
+    <footer class="footer">
+      <p>Last updated: <span id="last-updated">Never</span></p>
+    </footer>
+  </div>
+  
+  <script src="website/script.js"></script>
+</body>
+</html> 
