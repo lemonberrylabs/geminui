@@ -118,6 +118,25 @@ async function extractAllConversations() {
     return conversations;
   }
 
+  // Fetch existing stored conversations to check against for early exit
+  let storedConversationUrls = new Set();
+  try {
+    const result = await new Promise((resolve) => {
+      chrome.storage.local.get(['geminiConversations'], resolve);
+    });
+    if (result.geminiConversations && Array.isArray(result.geminiConversations)) {
+      result.geminiConversations.forEach(convo => {
+        if (convo.url) {
+          storedConversationUrls.add(convo.url);
+        }
+      });
+    }
+    console.log(`[GeminiUI Enhancer] Loaded ${storedConversationUrls.size} URLs from local storage for comparison.`);
+  } catch (error) {
+    console.error('[GeminiUI Enhancer] Error reading stored conversations for URL comparison:', error);
+    // Continue without this optimization if storage read fails
+  }
+
   // Retry mechanism for finding the conversations-list element
   let conversationListEl = null;
   const maxListRetries = 5; // Try up to 5 times
@@ -259,6 +278,9 @@ async function extractAllConversations() {
   const conversationItemContainers = conversationListEl.querySelectorAll('div.conversation-items-container');
   console.log(`[GeminiUI Enhancer] Found ${conversationItemContainers.length} potential conversation item containers (div.conversation-items-container).`);
 
+  let foundStoredConversationsCount = 0;
+  const MAX_STORED_TO_FIND_BEFORE_STOPPING = 3;
+
   for (const container of conversationItemContainers) {
     // The actual clickable item with jslog is a div with role="button" and data-test-id="conversation"
     const jslogEl = container.querySelector('div[role="button"][data-test-id="conversation"][jslog]');
@@ -282,6 +304,16 @@ async function extractAllConversations() {
           const chatId = match[1]; // This is the ID, e.g., "0926671376b872ce"
           url = `https://gemini.google.com/app/${chatId}`;
           console.log(`[GeminiUI Enhancer] Extracted title: "${title}", id: ${chatId}, url: ${url}`);
+
+          // Check if this conversation is already stored to implement early exit
+          if (storedConversationUrls.has(url)) {
+            foundStoredConversationsCount++;
+            console.log(`[GeminiUI Enhancer] Found a stored conversation: "${title}" (${url}). Count: ${foundStoredConversationsCount}/${MAX_STORED_TO_FIND_BEFORE_STOPPING}`);
+            if (foundStoredConversationsCount >= MAX_STORED_TO_FIND_BEFORE_STOPPING) {
+              console.log(`[GeminiUI Enhancer] Found ${MAX_STORED_TO_FIND_BEFORE_STOPPING} stored conversations. Stopping further item processing.`);
+              break; // Exit the loop over conversationItemContainers
+            }
+          }
         } else {
           console.warn(`[GeminiUI Enhancer] Could not extract chat ID from jslog: "${jslog}" on element:`, jslogEl);
         }
@@ -304,7 +336,7 @@ async function extractAllConversations() {
     }
   }
   
-  console.log(`[GeminiUI Enhancer] Extracted ${conversations.length} conversations.`);
+  console.log(`[GeminiUI Enhancer] Extracted ${conversations.length} new/updated conversations from the list (potentially after an early stop).`);
   return conversations;
 }
 
