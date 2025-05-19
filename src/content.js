@@ -101,29 +101,16 @@ async function extractAllConversations() {
 
   // First, check local storage for existing conversation count
   let storedConversationsCount = 0;
-  try {
-    const result = await new Promise((resolve) => {
-      chrome.storage.local.get(['geminiConversations'], resolve);
-    });
-    storedConversationsCount = result.geminiConversations ? result.geminiConversations.length : 0;
-    console.log(`[GeminiUI Enhancer] Found ${storedConversationsCount} conversations in local storage.`);
-  } catch (error) {
-    console.error('[GeminiUI Enhancer] Error reading from local storage:', error);
-  }
-
-  // Ensure sidebar is open (assuming conversations-list might be in a sidebar)
-  const sidebarReady = await ensureSidebarOpen();
-  if (!sidebarReady) {
-    console.error('[GeminiUI Enhancer] Sidebar could not be opened or found.');
-    return conversations;
-  }
-
   // Fetch existing stored conversations to check against for early exit
   let storedConversationUrls = new Set();
   try {
     const result = await new Promise((resolve) => {
       chrome.storage.local.get(['geminiConversations'], resolve);
     });
+    storedConversationsCount = result.geminiConversations ? result.geminiConversations.length : 0;
+    console.log(`[GeminiUI Enhancer] Found ${storedConversationsCount} conversations in local storage.`);
+    
+    // Build set of stored URLs for early exit check
     if (result.geminiConversations && Array.isArray(result.geminiConversations)) {
       result.geminiConversations.forEach(convo => {
         if (convo.url) {
@@ -133,8 +120,14 @@ async function extractAllConversations() {
     }
     console.log(`[GeminiUI Enhancer] Loaded ${storedConversationUrls.size} URLs from local storage for comparison.`);
   } catch (error) {
-    console.error('[GeminiUI Enhancer] Error reading stored conversations for URL comparison:', error);
-    // Continue without this optimization if storage read fails
+    console.error('[GeminiUI Enhancer] Error reading from local storage:', error);
+  }
+
+  // Ensure sidebar is open (assuming conversations-list might be in a sidebar)
+  const sidebarReady = await ensureSidebarOpen();
+  if (!sidebarReady) {
+    console.error('[GeminiUI Enhancer] Sidebar could not be opened or found.');
+    return conversations;
   }
 
   // Retry mechanism for finding the conversations-list element
@@ -171,6 +164,47 @@ async function extractAllConversations() {
 
   const scrollerEl = conversationListEl.closest('infinite-scroller') || conversationListEl.closest('.overflow-container');
   
+  // Function to check if we have found enough stored conversations to stop
+  const MAX_STORED_TO_FIND_BEFORE_STOPPING = 3;
+  let foundStoredConversationsCount = 0;
+  
+  async function checkCurrentConversationsForEarlyExit() {
+    console.log('[GeminiUI Enhancer] Checking current visible conversations for early exit...');
+    // Get currently visible conversation items
+    const currentContainers = conversationListEl.querySelectorAll('div.conversation-items-container');
+    
+    for (const container of currentContainers) {
+      const jslogEl = container.querySelector('div[role="button"][data-test-id="conversation"][jslog]');
+      
+      if (jslogEl) {
+        const jslog = jslogEl.getAttribute('jslog');
+        if (jslog) {
+          const jslogPattern = /BardVeMetadataKey:\[(?:[^,\]]*?,){7}\s*\["(?:c_)?([a-zA-Z0-9]+)"/;
+          const match = jslog.match(jslogPattern);
+          
+          if (match && match[1]) { 
+            const chatId = match[1];
+            const url = `https://gemini.google.com/app/${chatId}`;
+            
+            // Check if this conversation is already stored
+            if (storedConversationUrls.has(url)) {
+              foundStoredConversationsCount++;
+              const titleEl = jslogEl.querySelector('div.conversation-title');
+              const title = titleEl && titleEl.textContent ? titleEl.textContent.trim() : 'Untitled';
+              console.log(`[GeminiUI Enhancer] Found a stored conversation during scrolling: "${title}" (${url}). Count: ${foundStoredConversationsCount}/${MAX_STORED_TO_FIND_BEFORE_STOPPING}`);
+              
+              if (foundStoredConversationsCount >= MAX_STORED_TO_FIND_BEFORE_STOPPING) {
+                console.log(`[GeminiUI Enhancer] Found ${MAX_STORED_TO_FIND_BEFORE_STOPPING} stored conversations during scrolling. Stopping further scrolling.`);
+                return true; // Signal to stop scrolling
+              }
+            }
+          }
+        }
+      }
+    }
+    return false; // Continue scrolling
+  }
+  
   if (storedConversationsCount <= 600) {
     console.log('[GeminiUI Enhancer] Less than or equal to 600 conversations stored, attempting to load all conversations.');
     if (scrollerEl) {
@@ -182,6 +216,12 @@ async function extractAllConversations() {
       const MAX_NO_NEW_CONTENT_STREAK = 3; // How many times to tolerate no scroll height change if button also not actionable
 
       while (attempts < MAX_SCROLL_ATTEMPTS) {
+        // Check if we should stop scrolling based on finding stored conversations
+        if (await checkCurrentConversationsForEarlyExit()) {
+          console.log('[GeminiUI Enhancer] Early exit condition met during scrolling. Stopping scroll process.');
+          break;
+        }
+        
         previousScrollHeight = currentScrollHeight;
         scrollerEl.scrollTop = scrollerEl.scrollHeight; // Scroll to the bottom
         await sleep(2000); // Wait for content to load after scroll (increased from 1500)
@@ -190,6 +230,13 @@ async function extractAllConversations() {
         let showMoreClickedInThisIteration = false;
         // Try to find and click "Show more" button multiple times if needed
         for (let btnAttempt = 0; btnAttempt < 3; btnAttempt++) {
+          // Check again for early exit after waiting for content to load
+          if (await checkCurrentConversationsForEarlyExit()) {
+            console.log('[GeminiUI Enhancer] Early exit condition met during button check. Stopping scroll process.');
+            attempts = MAX_SCROLL_ATTEMPTS; // Force exit from outer loop
+            break;
+          }
+          
           const showMoreBtn = conversationListEl.querySelector('button[data-test-id="show-more-button"]');
           if (showMoreBtn && showMoreBtn.offsetParent !== null && showMoreBtn.textContent && showMoreBtn.textContent.trim().toLowerCase() === 'show more') {
             console.log(`[GeminiUI Enhancer] Clicking "Show more" button (Attempt ${btnAttempt + 1}/3 in scroll iteration).`);
@@ -241,6 +288,12 @@ async function extractAllConversations() {
 
       // eslint-disable-next-line no-constant-condition
       while (showMoreButtonVisibleAndActionable) {
+        // Check if we should stop based on finding stored conversations
+        if (await checkCurrentConversationsForEarlyExit()) {
+          console.log('[GeminiUI Enhancer] Early exit condition met during fallback button checks. Stopping process.');
+          break;
+        }
+        
         let currentShowMoreBtn = conversationListEl.querySelector('button[data-test-id="show-more-button"]');
         if (currentShowMoreBtn) {
           initialButtonFindAttempts = 0;
@@ -278,8 +331,8 @@ async function extractAllConversations() {
   const conversationItemContainers = conversationListEl.querySelectorAll('div.conversation-items-container');
   console.log(`[GeminiUI Enhancer] Found ${conversationItemContainers.length} potential conversation item containers (div.conversation-items-container).`);
 
-  let foundStoredConversationsCount = 0;
-  const MAX_STORED_TO_FIND_BEFORE_STOPPING = 3;
+  // Reset counter for final extraction phase
+  foundStoredConversationsCount = 0;
 
   for (const container of conversationItemContainers) {
     // The actual clickable item with jslog is a div with role="button" and data-test-id="conversation"
@@ -304,15 +357,11 @@ async function extractAllConversations() {
           const chatId = match[1]; // This is the ID, e.g., "0926671376b872ce"
           url = `https://gemini.google.com/app/${chatId}`;
           console.log(`[GeminiUI Enhancer] Extracted title: "${title}", id: ${chatId}, url: ${url}`);
-
-          // Check if this conversation is already stored to implement early exit
+          
+          // Check if this conversation is already stored (for counting only, we still extract all visible)
           if (storedConversationUrls.has(url)) {
             foundStoredConversationsCount++;
-            console.log(`[GeminiUI Enhancer] Found a stored conversation: "${title}" (${url}). Count: ${foundStoredConversationsCount}/${MAX_STORED_TO_FIND_BEFORE_STOPPING}`);
-            if (foundStoredConversationsCount >= MAX_STORED_TO_FIND_BEFORE_STOPPING) {
-              console.log(`[GeminiUI Enhancer] Found ${MAX_STORED_TO_FIND_BEFORE_STOPPING} stored conversations. Stopping further item processing.`);
-              break; // Exit the loop over conversationItemContainers
-            }
+            console.log(`[GeminiUI Enhancer] Found a stored conversation during extraction: "${title}" (${url}). Count: ${foundStoredConversationsCount}/${MAX_STORED_TO_FIND_BEFORE_STOPPING}`);
           }
         } else {
           console.warn(`[GeminiUI Enhancer] Could not extract chat ID from jslog: "${jslog}" on element:`, jslogEl);
@@ -336,7 +385,7 @@ async function extractAllConversations() {
     }
   }
   
-  console.log(`[GeminiUI Enhancer] Extracted ${conversations.length} new/updated conversations from the list (potentially after an early stop).`);
+  console.log(`[GeminiUI Enhancer] Extracted ${conversations.length} conversations. Found ${foundStoredConversationsCount} already stored conversations during extraction.`);
   return conversations;
 }
 
