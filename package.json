@@ -1,6 +1,6 @@
 {
   "name": "gemini-ui-enhancer",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "description": "Chrome extension to enhance Gemini UI. This package.json is for managing development scripts.",
   "scripts": {

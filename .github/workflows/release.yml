@@ -63,3 +63,13 @@ jobs:
           body: "Automated release for GeminiUI Enhancer version ${{ steps.get_version.outputs.version }}. SHA ${{ github.sha }}"
           draft: false
           prerelease: ${{startsWith(github.ref_name, 'v0.')}}
+
+      - name: Upload to Chrome Web Store
+        uses: mobilefirstllc/cws-publish@latest
+        with:
+          action: 'publish'  # one of: upload, publish, testers
+          client_id: ${{ secrets.CLIENT_ID }}
+          client_secret: ${{ secrets.CLIENT_SECRET }}
+          refresh_token: ${{ secrets.REFRESH_TOKEN }}
+          extension_id: '32-CHAR EXTENSION ID' 
+          zip_file: 'gemini-ui-enhancer-${{ steps.get_version.outputs.version }}.zip'
