@@ -74,10 +74,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       currentScrapingState = 'error'; // Or perhaps 'idle' depending on desired retry logic
     }
     
-    // Relay scraping status to popup and any other extension pages
-    chrome.runtime.sendMessage(message); // This will send to popup.js and other listeners
-    console.log('[GeminiUI Enhancer Background] Relaying scraping status:', message.status, 'New state:', currentScrapingState);
-    sendResponse({ success: true, message: 'Scraping status relayed' });
+    // Store the status in storage so popup can listen for changes
+    chrome.storage.local.set({ 
+      currentScrapingStatus: message,
+      lastScrapingUpdate: Date.now()
+    });
+    
+    console.log('[GeminiUI Enhancer Background] Updated scraping status:', message.status, 'New state:', currentScrapingState);
+    sendResponse({ success: true, message: 'Scraping status updated' });
     return false; // No further async response from here
   } else if (message.action === 'getScrapingState') {
     console.log('[GeminiUI Enhancer Background] Popup requested scraping state. Current state:', currentScrapingState);

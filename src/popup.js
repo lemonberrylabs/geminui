@@ -76,35 +76,58 @@ refreshButton.addEventListener('click', async () => {
 // Listen for messages from the background script (e.g., scraping status)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'scrapingStatus') {
-    if (message.status === 'started') {
-      scrapingIndicator.textContent = 'Scraping conversations...';
-      scrapingIndicator.style.display = 'block';
-      refreshButton.disabled = true;
-      refreshButton.textContent = 'Scraping...';
-    } else if (message.status === 'completed') {
-      scrapingIndicator.textContent = `Scraping complete. Found ${message.count || 0} new.`;
-      // Keep indicator visible for a moment, then hide
-      setTimeout(() => {
-        scrapingIndicator.style.display = 'none';
-      }, 3000);
-      refreshButton.disabled = false;
-      refreshButton.textContent = 'Refresh Data';
-      loadData(); // Reload data to show new count and last updated
-    } else if (message.status === 'error') {
-      scrapingIndicator.textContent = `Error during scraping: ${message.errorMessage || 'Unknown error'}`;
-      scrapingIndicator.style.backgroundColor = '#fce8e6'; // Error color
-      scrapingIndicator.style.color = '#c5221f';
-      // Keep indicator visible for a moment, then hide
-      setTimeout(() => {
-        scrapingIndicator.style.display = 'none';
-        scrapingIndicator.style.backgroundColor = '#e8f0fe'; // Reset color
-        scrapingIndicator.style.color = '#1967d2';
-      }, 5000);
-      refreshButton.disabled = false;
-      refreshButton.textContent = 'Refresh Data';
+    handleScrapingStatusUpdate(message);
+  }
+});
+
+// Listen for storage changes to update UI in real-time
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local') {
+    // Handle conversation count changes
+    if (changes.geminiConversations || changes.lastUpdated) {
+      loadData();
+    }
+    
+    // Handle scraping status changes
+    if (changes.currentScrapingStatus) {
+      const statusMessage = changes.currentScrapingStatus.newValue;
+      if (statusMessage) {
+        handleScrapingStatusUpdate(statusMessage);
+      }
     }
   }
 });
+
+// Function to handle scraping status updates (shared between message and storage listeners)
+function handleScrapingStatusUpdate(message) {
+  if (message.status === 'started') {
+    scrapingIndicator.textContent = 'Scraping conversations...';
+    scrapingIndicator.style.display = 'block';
+    refreshButton.disabled = true;
+    refreshButton.textContent = 'Scraping...';
+  } else if (message.status === 'completed') {
+    scrapingIndicator.textContent = `Scraping complete. Found ${message.count || 0} new.`;
+    // Keep indicator visible for a moment, then hide
+    setTimeout(() => {
+      scrapingIndicator.style.display = 'none';
+    }, 3000);
+    refreshButton.disabled = false;
+    refreshButton.textContent = 'Refresh Data';
+    loadData(); // Reload data to show new count and last updated
+  } else if (message.status === 'error') {
+    scrapingIndicator.textContent = `Error during scraping: ${message.errorMessage || 'Unknown error'}`;
+    scrapingIndicator.style.backgroundColor = '#fce8e6'; // Error color
+    scrapingIndicator.style.color = '#c5221f';
+    // Keep indicator visible for a moment, then hide
+    setTimeout(() => {
+      scrapingIndicator.style.display = 'none';
+      scrapingIndicator.style.backgroundColor = '#e8f0fe'; // Reset color
+      scrapingIndicator.style.color = '#1967d2';
+    }, 5000);
+    refreshButton.disabled = false;
+    refreshButton.textContent = 'Refresh Data';
+  }
+}
 
 // Function to update UI based on scraping state
 function updateUiForScrapingState(state) {
@@ -127,7 +150,20 @@ function updateUiForScrapingState(state) {
 // Initialize the popup
 document.addEventListener('DOMContentLoaded', () => {
   loadData();
-  // Ask background script for current scraping state
+  
+  // Check for recent scraping status in storage
+  chrome.storage.local.get(['currentScrapingStatus'], (result) => {
+    if (result.currentScrapingStatus) {
+      // Only show status if it's very recent (within last 10 seconds) and still active
+      const isRecent = result.currentScrapingStatus.status === 'started' || 
+                      (Date.now() - (result.lastScrapingUpdate || 0)) < 10000;
+      if (isRecent) {
+        handleScrapingStatusUpdate(result.currentScrapingStatus);
+      }
+    }
+  });
+  
+  // Ask background script for current scraping state as fallback
   chrome.runtime.sendMessage({ action: 'getScrapingState' }, (response) => {
     if (response && response.status) {
       console.log('[GeminiUI Enhancer Popup] Received initial scraping state:', response.status);
